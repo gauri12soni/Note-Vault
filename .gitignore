@@ -17,6 +17,11 @@ target/
 # Ignore Spring Boot application properties
 /src/main/resources/application.properties
 
+# Ignore logs
+logs/
+*.log
+
+
 ### IntelliJ IDEA ###
 .idea
 *.iws

@@ -12,7 +12,7 @@
 	</parent>
 
 	<groupId>com.gauri</groupId>
-	<artifactId>note-vault</artifactId>
+	<artifactId>NoteVault</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>Note Vault</name>
 	<description>Note Vault project for Spring Boot</description>
