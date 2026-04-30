@@ -1,62 +1,54 @@
 package com.gauri.noteVault.security;
 
-import io.jsonwebtoken.*;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.security.Key;
+import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 
 @Component
+@Slf4j
 public class JwtUtil {
 
-    private final Key key;
-    private final long jwtExpirationMs;
+    @Value("${jwt.secret}")
+    private String secret;
 
-    public JwtUtil(@Value("${jwt.secret}") String secret,
-                   @Value("${jwt.expiration-ms}") long jwtExpirationMs) {
-        // Ensure at least 32-byte secret for HS256
-        if (secret.length() < 32) {
-            throw new IllegalArgumentException("JWT secret must be at least 32 characters long!");
-        }
-        this.key = Keys.hmacShaKeyFor(secret.getBytes());
-        this.jwtExpirationMs = jwtExpirationMs;
+    private SecretKey getSigningKey() {
+        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        return Keys.hmacShaKeyFor(keyBytes);
     }
 
-    public String generateToken(String username) {
-        Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + jwtExpirationMs);
+    public String generateToken(String username, String sessionId, long expiry) {
+
         return Jwts.builder()
-                .setSubject(username)
-                .setIssuedAt(now)
-                .setExpiration(expiryDate)
-                .signWith(key, SignatureAlgorithm.HS256)
+                .subject(username)
+                .claim("sessionId", sessionId)
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + expiry))
+                .signWith(getSigningKey())
                 .compact();
+
     }
 
     public String extractUsername(String token) {
-        return Jwts.parserBuilder()
-                .setSigningKey(key)
-                .build()
-                .parseClaimsJws(token)
-                .getBody()
-                .getSubject();
+
+        return getClaims(token).getSubject();
     }
 
-    public boolean validateToken(String token) {
-        try {
-            Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(token);
-            return true;
-        } catch (ExpiredJwtException ex) {
-            System.out.println("JWT expired: " + ex.getMessage());
-        } catch (UnsupportedJwtException ex) {
-            System.out.println("Unsupported JWT: " + ex.getMessage());
-        } catch (MalformedJwtException ex) {
-            System.out.println("Malformed JWT: " + ex.getMessage());
-        } catch (SecurityException | IllegalArgumentException ex) {
-            System.out.println("Invalid JWT: " + ex.getMessage());
-        }
-        return false;
+    public String extractSessionId(String token) {
+        return getClaims(token).get("sessionId", String.class);
+    }
+
+    private Claims getClaims(String token) {
+        return Jwts.parser()
+                .verifyWith(getSigningKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
     }
 }

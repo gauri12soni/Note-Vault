@@ -14,6 +14,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.UUID;
 
 @Service
 public class NoteServiceImpl implements NoteService {
@@ -30,12 +31,12 @@ public class NoteServiceImpl implements NoteService {
 
     // Create a new note for a given user
     @Override
-    public NoteResponseDTO createNote(NoteRequestDTO dto, String username) {
-        logger.debug("Creating note for user: {}", username);
+    public NoteResponseDTO createNote(NoteRequestDTO dto, UUID userId) {
+        logger.debug("Creating note for user ID: {}", userId);
 
-        User user = userRepository.findByUsername(username)
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> {
-                    logger.warn("User '{}' not found, cannot create note", username);
+                    logger.warn("User ID '{}' not found, cannot create note", userId);
                     return new ResourceNotFoundException("User not found");
                 });
 
@@ -46,36 +47,34 @@ public class NoteServiceImpl implements NoteService {
         note.setUser(user);
 
         Note saved = noteRepository.save(note);
-        logger.info("Note created successfully for user: {}, Note ID: {}", username, saved.getId());
+        logger.info("Note created successfully for user: {}, Note ID: {}", user.getUsername(), saved.getId());
 
         return Mapper.toDto(saved);
     }
 
     // Retrieve a note by ID for a specific user
     @Override
-    public NoteResponseDTO getById(Long id, String username) {
-        logger.debug("Fetching note ID {} for user: {}", id, username);
+    public NoteResponseDTO getById(Long id, UUID userId) {
+        logger.debug("Fetching note ID {} for user ID: {}", id, userId);
 
-        Note note = noteRepository.findById(id)
-                .filter(n -> n.getUser().getUsername().equals(username))
+        Note note = noteRepository.findByIdAndUserId(id, userId)
                 .orElseThrow(() -> {
-                    logger.warn("Note ID {} not found for user: {}", id, username);
+                    logger.warn("Note ID {} not found for user ID: {}", id, userId);
                     return new ResourceNotFoundException("Note not found with id " + id);
                 });
 
-        logger.info("Note ID {} retrieved successfully for user: {}", id, username);
+        logger.info("Note ID {} retrieved successfully", id);
         return Mapper.toDto(note);
     }
 
     // Update an existing note
     @Override
-    public NoteResponseDTO update(Long id, NoteRequestDTO dto, String username) {
-        logger.debug("Updating note ID {} for user: {}", id, username);
+    public NoteResponseDTO update(Long id, NoteRequestDTO dto, UUID userId) {
+        logger.debug("Updating note ID {} for user ID: {}", id, userId);
 
-        Note note = noteRepository.findById(id)
-                .filter(n -> n.getUser().getUsername().equals(username))
+        Note note = noteRepository.findByIdAndUserId(id, userId)
                 .orElseThrow(() -> {
-                    logger.warn("Note ID {} not found for user: {}", id, username);
+                    logger.warn("Note ID {} not found for user ID: {}", id, userId);
                     return new ResourceNotFoundException("Note not found with id " + id);
                 });
 
@@ -84,40 +83,39 @@ public class NoteServiceImpl implements NoteService {
         note.setTags(dto.getTags() != null ? dto.getTags() : new ArrayList<>());
 
         Note updated = noteRepository.save(note);
-        logger.info("Note ID {} updated successfully for user: {}", id, username);
+        logger.info("Note ID {} updated successfully", id);
 
         return Mapper.toDto(updated);
     }
 
     // Delete a note by ID for a specific user
     @Override
-    public void delete(Long id, String username) {
-        logger.debug("Deleting note ID {} for user: {}", id, username);
+    public void delete(Long id, UUID userId) {
+        logger.debug("Deleting note ID {} for user ID: {}", id, userId);
 
-        Note note = noteRepository.findById(id)
-                .filter(n -> n.getUser().getUsername().equals(username))
+        Note note = noteRepository.findByIdAndUserId(id, userId)
                 .orElseThrow(() -> {
-                    logger.warn("Note ID {} not found for user: {}", id, username);
+                    logger.warn("Note ID {} not found for user ID: {}", id, userId);
                     return new ResourceNotFoundException("Note not found with id " + id);
                 });
 
         noteRepository.delete(note);
-        logger.info("Note ID {} deleted successfully for user: {}", id, username);
+        logger.info("Note ID {} deleted successfully", id);
     }
 
     // List notes for a user with optional search and pagination
     @Override
-    public Page<NoteResponseDTO> list(String username, String q, Pageable pageable) {
-        logger.debug("Listing notes for user: {}, search query: '{}', page: {}, size: {}", username, q, pageable.getPageNumber(), pageable.getPageSize());
+    public Page<NoteResponseDTO> list(UUID userId, String q, Pageable pageable) {
+        logger.debug("Listing notes for user ID: {}, search query: '{}'", userId, q);
 
         Page<Note> page;
         if (q == null || q.isBlank()) {
-            page = noteRepository.findByUserUsername(username, pageable);
+            page = noteRepository.findByUserId(userId, pageable);
         } else {
-            page = noteRepository.searchByUserAndQuery(username, q, pageable);
+            page = noteRepository.searchByUserIdAndQuery(userId, q, pageable);
         }
 
-        logger.info("Notes listed successfully for user: {}, total notes: {}", username, page.getTotalElements());
+        logger.info("Notes listed successfully, total notes: {}", page.getTotalElements());
         return page.map(Mapper::toDto);
     }
 }

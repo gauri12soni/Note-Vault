@@ -1,40 +1,95 @@
 package com.gauri.noteVault.controller;
 
-import com.gauri.noteVault.dto.AuthRequest;
-import com.gauri.noteVault.dto.AuthResponse;
+import com.gauri.noteVault.dto.JwtResponse;
+import com.gauri.noteVault.dto.LoginRequest;
+import com.gauri.noteVault.dto.RefreshRequest;
 import com.gauri.noteVault.dto.RegisterRequest;
+import com.gauri.noteVault.security.JwtUtil;
 import com.gauri.noteVault.service.AuthService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
 
-    private static final Logger logger = LoggerFactory.getLogger(AuthController.class);
+    @Autowired
+    private AuthService authService;
 
-    private final AuthService authService;
+    @Autowired
+    private JwtUtil jwtUtil;
 
-    public AuthController(AuthService authService) {
-        this.authService = authService;
-    }
-
-    // Register a new user
     @PostMapping("/register")
-    public AuthResponse register(@RequestBody RegisterRequest request) {
-        logger.info("Register API called for username: {}", request.getUsername());
-        AuthResponse response = authService.register(request);
-        logger.info("User '{}' registered successfully", request.getUsername());
-        return response;
+    public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
+        return authService.register(request);
     }
 
-    // Login an existing user
     @PostMapping("/login")
-    public AuthResponse login(@RequestBody AuthRequest request) {
-        logger.info("Login API called for username: {}", request.getUsername());
-        AuthResponse response = authService.login(request);
-        logger.info("User '{}' logged in successfully", request.getUsername());
-        return response;
+    public JwtResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+        // Auto-capture from browser
+        String ipAddress = getClientIpAddress(httpRequest);  // Auto-detected
+        String userAgent = httpRequest.getHeader("User-Agent");  // Auto-detected
+
+
+        return authService.login(request, ipAddress, userAgent);
+    }
+
+    @PostMapping("/refresh")
+    public JwtResponse refresh(@Valid @RequestBody RefreshRequest request, HttpServletRequest httpRequest) {
+
+        String ipAddress = getClientIpAddress(httpRequest);
+        String userAgent = httpRequest.getHeader("User-Agent");
+
+        return authService.refresh(request.getRefreshToken(), ipAddress, userAgent);
+    }
+
+    @PostMapping("/logout")
+    public String logout(HttpServletRequest request) {
+        String authHeader = request.getHeader("Authorization");
+
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No token provided");
+        }
+
+        String token = authHeader.substring(7);
+        String sessionId = jwtUtil.extractSessionId(token);
+
+        return authService.logout(sessionId);
+    }
+
+
+    // Get real client IP (handles proxies)
+    private String getClientIpAddress(HttpServletRequest request) {
+        String ipAddress = request.getHeader("X-Forwarded-For");
+
+        if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
+            ipAddress = request.getHeader("X-Real-IP");
+        }
+
+        if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
+            ipAddress = request.getHeader("Proxy-Client-IP");
+        }
+
+        if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
+            ipAddress = request.getHeader("WL-Proxy-Client-IP");
+        }
+
+        if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
+            ipAddress = request.getRemoteAddr();
+        }
+
+        // If behind proxy, X-Forwarded-For contains multiple IPs (client, proxy1, proxy2)
+        // Take the first one (original client)
+        if (ipAddress != null && ipAddress.contains(",")) {
+            ipAddress = ipAddress.split(",")[0].trim();
+        }
+
+        return ipAddress != null ? ipAddress : "unknown";
     }
 }
